@@ -2313,11 +2313,10 @@ document.addEventListener('DOMContentLoaded',()=>{
 // ================================================================
 </script>
 
-<!-- Firebase SDK -->
-<script type="module">
-import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
-import { getFirestore, doc, setDoc, getDoc, onSnapshot, collection } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
-
+<!-- Firebase SDK compat (Safari/iOS compatibile) -->
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js"></script>
+<script>
 const firebaseConfig = {
   apiKey: "AIzaSyA_8lc4OtfX9VXJtBl60Pd4VqUrrhAVaOE",
   authDomain: "crm-gazzoli.firebaseapp.com",
@@ -2326,9 +2325,8 @@ const firebaseConfig = {
   messagingSenderId: "780069823894",
   appId: "1:780069823894:web:b8260c889c9b760f0069b7"
 };
-
-const app = initializeApp(firebaseConfig);
-const db = getFirestore(app);
+firebase.initializeApp(firebaseConfig);
+const db = firebase.firestore();
 
 // ---- Indicatore sync UI ----
 function showSync(msg, ok=true){
@@ -2354,7 +2352,7 @@ async function fbSave(){
       clientiMod[c.sap] = { acq: c.acq||'', note: c.note||'', ref: c.ref||'', tel: c.tel||'', email: c.email||'' };
     });
 
-    await setDoc(doc(db, 'crm', 'dati'), {
+    await db.collection('crm').doc('dati').set( {
       ordini: ordiniExtra,
       persi: persi,
       prospect: prospect,
@@ -2372,7 +2370,7 @@ async function fbSave(){
 async function fbLoad(){
   try {
     showSync('Connessione...', true);
-    const snap = await getDoc(doc(db, 'crm', 'dati'));
+    const snap = await db.collection('crm').doc('dati').get();
     if(snap.exists()){
       const d = snap.data();
       if(d.ordini) ordiniExtra = d.ordini;
@@ -2408,7 +2406,7 @@ async function fbLoad(){
 }
 
 // ---- Listener in tempo reale (aggiorna altri dispositivi istantaneamente) ----
-onSnapshot(doc(db, 'crm', 'dati'), (snap) => {
+db.collection('crm').doc('dati').onSnapshot( (snap) => {
   if(!snap.exists()) return;
   const d = snap.data();
   // Aggiorna solo se i dati vengono da un altro dispositivo (timestamp diverso)
