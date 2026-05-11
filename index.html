@@ -280,6 +280,7 @@ window.addEventListener('load', function() {
     <div class="nav-lbl">Gestione</div>
     <div class="ni" onclick="go('ordini')"><span class="nic">✅</span>Ordini Manuali</div>
     <div class="ni" onclick="go('persi')"><span class="nic">❌</span>Ordini Persi</div>
+    <div class="ni" onclick="esportaPDF()" style="color:var(--acc)"><span class="nic">📄</span>Esporta Report PDF</div>
   </div>
   <div class="s-foot">Polyedra S.p.A. · Area 3 Graphic 012<br>Gazzoli Gianluca · T03012<br>Visual Apr.2026 · Graphic Print Mag.2026</div>
 </nav>
@@ -604,10 +605,25 @@ window.addEventListener('load', function() {
       <div class="fg"><label class="fl">Importo netto €</label><input class="fi" id="ford-in" readonly style="opacity:.6;color:var(--acc);font-weight:700"></div>
     </div>
     <div class="fr s3">
-      <div class="fg"><label class="fl">Provv. %</label><input class="fi" type="number" step="0.5" id="ford-pv" oninput="calcOrd()"></div>
-      <div class="fg"><label class="fl">Provv. € (auto)</label><input class="fi" id="ford-pe" readonly style="opacity:.6;color:var(--grn)"></div>
+      <div class="fg"><label class="fl">Provv. %</label>
+        <select class="fs" id="ford-pv" onchange="calcOrd()">
+          <option value="">— Scegli %</option>
+          <option value="1">1%</option><option value="1.5">1.5%</option>
+          <option value="2">2%</option><option value="2.5">2.5%</option>
+          <option value="3">3%</option><option value="3.5">3.5%</option>
+          <option value="4">4%</option><option value="4.5">4.5%</option>
+          <option value="5">5%</option><option value="5.5">5.5%</option>
+          <option value="6">6%</option><option value="6.5">6.5%</option>
+          <option value="7">7%</option><option value="7.5">7.5%</option>
+          <option value="8">8%</option><option value="8.5">8.5%</option>
+          <option value="9">9%</option><option value="9.5">9.5%</option>
+          <option value="10">10%</option>
+        </select>
+      </div>
+      <div class="fg"><label class="fl">Provv. € <span style="color:var(--grn);font-size:9px">(su valore fornitura)</span></label><input class="fi" id="ford-pe" readonly style="opacity:.8;color:var(--grn);font-weight:700"></div>
       <div class="fg"><label class="fl">Gruppo prod.</label><select class="fs" id="ford-gr"><option value="SP">SP</option><option value="CO">CO</option><option value="VP">VP</option><option value="LV">LV</option><option value="ST">ST</option></select></div>
     </div>
+    <div id="ford-provv-detail" style="display:none;background:rgba(61,184,112,.08);border:1px solid rgba(61,184,112,.25);border-radius:var(--r);padding:8px 12px;font-size:11px;margin-bottom:8px"></div>
     <div class="fr s1"><div class="fg"><label class="fl">Note</label><textarea class="ft" id="ford-n"></textarea></div></div>
   </div>
   <div class="mof"><button class="btn" onclick="closeM('m-ord')">Annulla</button><button class="btn bp2" onclick="savOrd()">Salva</button></div>
@@ -1419,7 +1435,29 @@ function calcOrd(){
   const pv=parseFloat(document.getElementById('ford-pv').value)||0;
   const netto=imp*(1-sc/100);
   document.getElementById('ford-in').value=f2(netto);
-  document.getElementById('ford-pe').value=f2(netto*pv/100);
+  const tipo=document.getElementById('ford-tipo').value;
+  const pmq=parseFloat(document.getElementById('ford-pmq').value)||0;
+  const qty=parseFloat(document.getElementById('ford-qty').value)||1;
+  const larg=parseFloat(document.getElementById('ford-larg').value)||0;
+  const lun=parseFloat(document.getElementById('ford-lun').value)||0;
+  let valFornitura=netto,baseCalcTxt='';
+  if(tipo==='rotolo'&&larg>0&&lun>0&&pmq>0){
+    const mqU=(larg/100)*lun;valFornitura=mqU*pmq*qty;
+    baseCalcTxt=`${f2(mqU)}mq/rot × €${f2(pmq)}/mq × ${qty} = <strong style="color:var(--acc)">€${f2(valFornitura)}</strong>`;
+  } else if(tipo==='foglio'&&larg>0&&lun>0&&pmq>0){
+    const mqU=(larg/100)*(lun/100);valFornitura=mqU*pmq*qty;
+    baseCalcTxt=`${f2(mqU)}mq/fog × €${f2(pmq)}/mq × ${qty} = <strong style="color:var(--acc)">€${f2(valFornitura)}</strong>`;
+  } else if(tipo==='ton'&&larg>0&&pmq>0){
+    valFornitura=larg*pmq*qty;
+    baseCalcTxt=`${larg}ton × €${f2(pmq)}/ton × ${qty} = <strong style="color:var(--acc)">€${f2(valFornitura)}</strong>`;
+  }
+  const provvEur=pv>0?valFornitura*pv/100:0;
+  document.getElementById('ford-pe').value=provvEur>0?f2(provvEur):'';
+  const detBox=document.getElementById('ford-provv-detail');
+  if(pv>0&&valFornitura>0&&baseCalcTxt){
+    detBox.style.display='block';
+    detBox.innerHTML=`💰 Provv. ${pv}% su fornitura: ${baseCalcTxt} → <strong style="color:var(--grn);font-size:13px">€${f2(provvEur)}</strong>`;
+  } else { detBox.style.display='none'; }
 }
 
 function rOrd(){
@@ -1522,8 +1560,14 @@ function savOrd(){
   const lun=parseFloat(document.getElementById('ford-lun').value)||0;
   const punitRaw=document.getElementById('ford-punit').value.replace('€','').trim();
   const punit=parseFloat(punitRaw)||0;
+  // Calcola valore fornitura per provvigione corretta
+  let valFornitura=netto;
+  if(tipo==='rotolo'&&larg>0&&lun>0&&pmq>0){valFornitura=(larg/100)*lun*pmq*qty;}
+  else if(tipo==='foglio'&&larg>0&&lun>0&&pmq>0){valFornitura=(larg/100)*(lun/100)*pmq*qty;}
+  else if(tipo==='ton'&&larg>0&&pmq>0){valFornitura=larg*pmq*qty;}
+  const provvEur=valFornitura*pv/100;
   if(clienti[parseInt(ci)])clienti[parseInt(ci)].acq=data;
-  const obj={ci:parseInt(ci),data,prodotto:prod,importo:imp,sconto:sc,netto,provvPct:pv,provvEur:netto*pv/100,note:document.getElementById('ford-n').value,pmq,punit,qty,tipo,larg,lun};
+  const obj={ci:parseInt(ci),data,prodotto:prod,importo:imp,sconto:sc,netto,provvPct:pv,provvEur,valFornitura,note:document.getElementById('ford-n').value,pmq,punit,qty,tipo,larg,lun};
   const idx=document.getElementById('eord-i').value;
   if(idx!=='')ordiniExtra[parseInt(idx)]=obj;else ordiniExtra.push(obj);
   closeM('m-ord');document.getElementById('eord-i').value='';document.getElementById('mord-t').textContent='Nuovo ordine';
@@ -2117,7 +2161,67 @@ if(window.innerWidth<=768){const btn=document.getElementById('btn-save');if(btn)
 window.addEventListener('resize',()=>{const btn=document.getElementById('btn-save');if(btn)btn.style.display=window.innerWidth<=768?'inline-flex':'none';});
 </script>
 
-<!-- Firebase compat SDK -->
+// ================================================================
+// EXPORT PDF REPORT
+// ================================================================
+function esportaPDF(){
+  const mese=new Date().toLocaleDateString('it-IT',{month:'long',year:'numeric'});
+  const oggi=new Date().toLocaleDateString('it-IT',{day:'2-digit',month:'2-digit',year:'numeric'});
+  const totFatt26=clienti.reduce((s,c)=>s+(c.fatt?.gen26||0)+(c.fatt?.mar26||0)+(c.fatt?.apr26||0),0);
+  const totAnn25=clienti.reduce((s,c)=>s+(c.fatt?.ann25||0),0);
+  const totOrdini=ordiniExtra.reduce((s,o)=>s+(o.importo||0),0);
+  const totNetto=ordiniExtra.reduce((s,o)=>s+(o.netto||0),0);
+  const totProvv=ordiniExtra.reduce((s,o)=>s+(o.provvEur||0),0);
+  const totPersi=persi.reduce((s,p)=>s+(p.importo||0),0);
+  const nCliAtt=clienti.filter(c=>(c.fatt?.gen26||0)+(c.fatt?.mar26||0)+(c.fatt?.apr26||0)>0).length;
+  const nProsp=prospect.filter(p=>p.stato!=='trasferito').length;
+  const top10=[...clienti].map(c=>({rag:c.rag,zona:c.zona,v25:c.fatt?.ann25||0,v:(c.fatt?.gen26||0)+(c.fatt?.mar26||0)+(c.fatt?.apr26||0)})).filter(c=>c.v>0).sort((a,b)=>b.v-a.v).slice(0,10);
+  const zone={};clienti.forEach(c=>{const z=c.zona||'Altro';if(!zone[z])zone[z]={n:0,v25:0,v26:0};zone[z].n++;zone[z].v25+=(c.fatt?.ann25||0);zone[z].v26+=(c.fatt?.gen26||0)+(c.fatt?.mar26||0)+(c.fatt?.apr26||0);});
+  const html=`<!DOCTYPE html><html lang="it"><head><meta charset="UTF-8"><title>Report CRM Gazzoli — ${mese}</title>
+<style>*{box-sizing:border-box;margin:0;padding:0}body{font-family:'Segoe UI',Arial,sans-serif;font-size:11px;color:#1a1a2e;background:#fff;padding:20px}.hdr{display:flex;justify-content:space-between;align-items:flex-start;border-bottom:3px solid #1a3a6e;padding-bottom:14px;margin-bottom:18px}.hdr h1{font-size:22px;font-weight:800;color:#1a3a6e;margin-bottom:2px}.hdr p{font-size:10px;color:#666}.ri{text-align:right;font-size:10px;color:#666}.ri strong{display:block;font-size:14px;color:#1a3a6e;font-weight:700}.sec{margin-bottom:22px}.st{font-size:13px;font-weight:700;color:#1a3a6e;border-left:4px solid #e8a020;padding-left:8px;margin-bottom:10px;text-transform:uppercase;letter-spacing:.5px}.mts{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-bottom:18px}.mt{background:#f0f4ff;border:1px solid #d0d8f0;border-radius:8px;padding:10px 12px;text-align:center}.mt .v{font-size:18px;font-weight:800;color:#1a3a6e}.mt .l{font-size:9px;color:#666;text-transform:uppercase;letter-spacing:.5px;margin-top:3px}.mt.g .v{color:#2a8a5a}.mt.o .v{color:#c87010}.mt.r .v{color:#c04040}table{width:100%;border-collapse:collapse;font-size:10px}th{background:#1a3a6e;color:#fff;padding:6px 8px;text-align:left;font-weight:600;font-size:9px;text-transform:uppercase;letter-spacing:.4px}td{padding:5px 8px;border-bottom:1px solid #eee}tr:nth-child(even) td{background:#f8f9ff}.n{text-align:right;font-weight:600}.gn{color:#2a8a5a}.or{color:#c87010}.rd{color:#c04040}.bl{color:#1a3a6e}.ft{margin-top:28px;padding-top:12px;border-top:2px solid #1a3a6e;display:flex;justify-content:space-between;font-size:9px;color:#888}.pb{page-break-before:always;margin-top:20px}.hi{background:#fff8e8!important}</style></head><body>
+<div class="hdr"><div><h1>🌿 POLYEDRA S.p.A.</h1><p>Area 3 Graphic 012 · Agente: Gazzoli Gianluca (T03012)</p><p style="margin-top:4px;font-weight:600;color:#e8a020;font-size:12px">REPORT CRM — ${mese.toUpperCase()}</p></div><div class="ri"><strong>Generato il</strong>${oggi}<br>Firebase Sync ✓</div></div>
+<div class="sec"><div class="st">📊 Riepilogo Generale</div><div class="mts">
+<div class="mt"><div class="v bl">€${fK(totFatt26)}</div><div class="l">Fatturato SAP 2026</div></div>
+<div class="mt g"><div class="v">€${fK(totProvv)}</div><div class="l">Provvigioni Maturate</div></div>
+<div class="mt o"><div class="v">€${fK(totOrdini)}</div><div class="l">Ordini Manuali</div></div>
+<div class="mt r"><div class="v">€${fK(totPersi)}</div><div class="l">Ordini Persi</div></div>
+<div class="mt"><div class="v bl">${clienti.length}</div><div class="l">Clienti Totali</div></div>
+<div class="mt g"><div class="v">${nCliAtt}</div><div class="l">Clienti Attivi 2026</div></div>
+<div class="mt o"><div class="v">${ordiniExtra.length}</div><div class="l">Ordini Inseriti</div></div>
+<div class="mt"><div class="v bl">${nProsp}</div><div class="l">Prospect Attivi</div></div>
+</div></div>
+<div class="sec"><div class="st">✅ Ordini Manuali (${ordiniExtra.length} · netto €${fK(totNetto)} · provv. €${fK(totProvv)})</div>
+${ordiniExtra.length>0?`<table><thead><tr><th>Data</th><th>Cliente</th><th>Prodotto</th><th class="n">Listino €</th><th class="n">Sc.%</th><th class="n">Netto €</th><th class="n">Provv.%</th><th class="n">Provv. €</th></tr></thead><tbody>
+${ordiniExtra.map(o=>`<tr><td>${fD(o.data)}</td><td style="font-weight:600">${esc(clienti[o.ci]?.rag||'—')}</td><td style="max-width:160px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(o.prodotto)}</td><td class="n">€${f2(o.importo)}</td><td class="n">${o.sconto||0}%</td><td class="n bl">€${f2(o.netto)}</td><td class="n">${o.provvPct||0}%</td><td class="n gn" style="font-weight:700">€${f2(o.provvEur)}</td></tr>`).join('')}
+<tr style="background:#f0f4ff;font-weight:700"><td colspan="3">TOTALI</td><td class="n bl">€${fK(totOrdini)}</td><td class="n">—</td><td class="n bl">€${fK(totNetto)}</td><td class="n">—</td><td class="n gn" style="font-size:13px">€${fK(totProvv)}</td></tr>
+</tbody></table>`:'<p style="color:#999;font-style:italic;padding:10px 0">Nessun ordine inserito.</p>'}
+</div>
+<div class="sec pb"><div class="st">🏆 Top 10 Clienti 2026</div>
+<table><thead><tr><th>#</th><th>Cliente</th><th>Zona</th><th class="n">Fatt. 2025</th><th class="n">2026 YTD</th><th class="n">Var.%</th></tr></thead><tbody>
+${top10.map((c,i)=>{const vp=c.v25>0?(((c.v-c.v25)/c.v25)*100).toFixed(1):'+∞';return`<tr class="${i<3?'hi':''}"><td style="font-weight:700;color:#1a3a6e">${i+1}</td><td style="font-weight:600">${esc(c.rag)}</td><td>${c.zona||'—'}</td><td class="n">€${fK(c.v25)}</td><td class="n bl" style="font-weight:700">€${fK(c.v)}</td><td class="n ${parseFloat(vp)>=0?'gn':'rd'}">${vp}%</td></tr>`;}).join('')}
+</tbody></table></div>
+<div class="sec"><div class="st">🗺️ Fatturato per Zona</div>
+<table><thead><tr><th>Zona</th><th class="n">Clienti</th><th class="n">Fatt. 2025</th><th class="n">2026 YTD</th><th class="n">Var.%</th></tr></thead><tbody>
+${Object.entries(zone).sort((a,b)=>b[1].v26-a[1].v26).map(([z,d])=>{const vp=d.v25>0?(((d.v26-d.v25)/d.v25)*100).toFixed(1):'+∞';return`<tr><td style="font-weight:600">${z}</td><td class="n">${d.n}</td><td class="n">€${fK(d.v25)}</td><td class="n bl" style="font-weight:700">€${fK(d.v26)}</td><td class="n ${parseFloat(vp)>=0?'gn':'rd'}">${vp}%</td></tr>`;}).join('')}
+<tr style="background:#f0f4ff;font-weight:700"><td>TOTALE</td><td class="n">${clienti.length}</td><td class="n">€${fK(totAnn25)}</td><td class="n bl">€${fK(totFatt26)}</td><td class="n">${totAnn25>0?(((totFatt26-totAnn25)/totAnn25)*100).toFixed(1):'+∞'}%</td></tr>
+</tbody></table></div>
+<div class="sec"><div class="st">🎯 Prospect & Da Riattivare (${nProsp})</div>
+<table><thead><tr><th>Ragione Sociale</th><th>Zona</th><th>Tipo</th><th>Stato</th><th>Priorità</th><th>Note</th></tr></thead><tbody>
+${prospect.filter(p=>p.stato!=='trasferito').map(p=>`<tr><td style="font-weight:600">${esc(p.rag)}</td><td>${p.zona||'—'}</td><td>${p.tipo||'—'}</td><td>${p.stato||'—'}</td><td>${p.prio||'—'}</td><td style="font-size:9px;color:#666">${esc(p.note||'')}</td></tr>`).join('')}
+</tbody></table></div>
+${persi.length>0?`<div class="sec"><div class="st">❌ Ordini Persi (${persi.length} · €${fK(totPersi)})</div>
+<table><thead><tr><th>Data</th><th>Cliente</th><th>Prodotto</th><th class="n">Valore €</th><th>Note</th></tr></thead><tbody>
+${persi.map(p=>`<tr><td>${fD(p.data)}</td><td style="font-weight:600">${esc(clienti[p.ci]?.rag||'—')}</td><td>${esc(p.prodotto||'—')}</td><td class="n rd">€${f2(p.importo||0)}</td><td style="font-size:9px">${esc(p.motivo||p.note||'—')}</td></tr>`).join('')}
+</tbody></table></div>`:''}
+<div class="ft"><div>📄 CRM Gazzoli · Polyedra S.p.A.</div><div>Agente: Gazzoli Gianluca (T03012) · ${oggi}</div><div>Visual Apr.2026 · Graphic Print Mag.2026</div></div>
+<script>window.onload=()=>setTimeout(()=>window.print(),300);<\/script>
+</body></html>`;
+  const w=window.open('','_blank');
+  if(w){w.document.write(html);w.document.close();}
+  else{alert('Abilita i popup per esportare il PDF!');}
+}
+
+// Firebase compat SDK
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js"></script>
 <script>
