@@ -2106,6 +2106,163 @@ document.addEventListener('DOMContentLoaded',()=>{
   },200);
 });
 
+
+// ================================================================
+// FIREBASE — Sincronizzazione dati in tempo reale
+// ================================================================
+</script>
+
+<!-- Firebase SDK -->
+<script type="module">
+import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
+import { getFirestore, doc, setDoc, getDoc, onSnapshot, collection } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
+
+const firebaseConfig = {
+  apiKey: "AIzaSyA_8lc4OtfX9VXJtBl60Pd4VqUrrhAVaOE",
+  authDomain: "crm-gazzoli.firebaseapp.com",
+  projectId: "crm-gazzoli",
+  storageBucket: "crm-gazzoli.firebasestorage.app",
+  messagingSenderId: "780069823894",
+  appId: "1:780069823894:web:b8260c889c9b760f0069b7"
+};
+
+const app = initializeApp(firebaseConfig);
+const db = getFirestore(app);
+
+// ---- Indicatore sync UI ----
+function showSync(msg, ok=true){
+  let el = document.getElementById('fb-sync');
+  if(!el){
+    el = document.createElement('div');
+    el.id = 'fb-sync';
+    el.style.cssText = 'position:fixed;bottom:max(16px,env(safe-area-inset-bottom));right:16px;background:#1e1e28;border:1px solid rgba(255,255,255,.12);border-radius:10px;padding:7px 13px;font-size:11px;font-weight:600;z-index:9998;transition:opacity .4s;display:flex;align-items:center;gap:6px';
+    document.body.appendChild(el);
+  }
+  el.innerHTML = (ok ? '🟢' : '🔴') + ' ' + msg;
+  el.style.opacity = '1';
+  clearTimeout(el._t);
+  el._t = setTimeout(()=>{ el.style.opacity='0'; }, 2500);
+}
+
+// ---- Salva tutto su Firebase ----
+async function fbSave(){
+  try {
+    // Raccoglie modifiche clienti (acq, note, ref, tel, email)
+    const clientiMod = {};
+    clienti.forEach(c => {
+      clientiMod[c.sap] = { acq: c.acq||'', note: c.note||'', ref: c.ref||'', tel: c.tel||'', email: c.email||'' };
+    });
+
+    await setDoc(doc(db, 'crm', 'dati'), {
+      ordini: ordiniExtra,
+      persi: persi,
+      prospect: prospect,
+      clientiMod: clientiMod,
+      ts: Date.now()
+    });
+    showSync('Sincronizzato ✓');
+  } catch(e) {
+    console.error('Firebase save error:', e);
+    showSync('Errore sync', false);
+  }
+}
+
+// ---- Carica da Firebase ----
+async function fbLoad(){
+  try {
+    showSync('Connessione...', true);
+    const snap = await getDoc(doc(db, 'crm', 'dati'));
+    if(snap.exists()){
+      const d = snap.data();
+      if(d.ordini) ordiniExtra = d.ordini;
+      if(d.persi) persi = d.persi;
+      if(d.prospect) prospect = d.prospect;
+      if(d.clientiMod){
+        clienti.forEach(c => {
+          if(d.clientiMod[c.sap]){
+            const m = d.clientiMod[c.sap];
+            if(m.acq) c.acq = m.acq;
+            if(m.note !== undefined) c.note = m.note;
+            if(m.ref) c.ref = m.ref;
+            if(m.tel) c.tel = m.tel;
+            if(m.email) c.email = m.email;
+          }
+        });
+      }
+      // Aggiorna tutte le viste
+      if(typeof rDash==='function') rDash();
+      if(typeof rOrd==='function') rOrd();
+      if(typeof rPer==='function') rPer();
+      if(typeof rPro==='function') rPro();
+      if(typeof rCli==='function') rCli();
+      if(typeof rRem==='function') rRem();
+      showSync('Dati caricati ✓');
+    } else {
+      showSync('Nessun dato remoto');
+    }
+  } catch(e) {
+    console.error('Firebase load error:', e);
+    showSync('Offline — dati locali', false);
+  }
+}
+
+// ---- Listener in tempo reale (aggiorna altri dispositivi istantaneamente) ----
+onSnapshot(doc(db, 'crm', 'dati'), (snap) => {
+  if(!snap.exists()) return;
+  const d = snap.data();
+  // Aggiorna solo se i dati vengono da un altro dispositivo (timestamp diverso)
+  if(window._lastFbSave && d.ts === window._lastFbSave) return;
+
+  if(d.ordini) ordiniExtra = d.ordini;
+  if(d.persi) persi = d.persi;
+  if(d.prospect) prospect = d.prospect;
+  if(d.clientiMod){
+    clienti.forEach(c => {
+      if(d.clientiMod[c.sap]){
+        const m = d.clientiMod[c.sap];
+        if(m.acq) c.acq = m.acq;
+        if(m.note !== undefined) c.note = m.note;
+        if(m.ref) c.ref = m.ref;
+        if(m.tel) c.tel = m.tel;
+        if(m.email) c.email = m.email;
+      }
+    });
+  }
+  if(typeof rDash==='function') rDash();
+  if(typeof rOrd==='function') rOrd();
+  if(typeof rPer==='function') rPer();
+  if(typeof rPro==='function') rPro();
+  if(typeof rCli==='function') rCli();
+  if(typeof rRem==='function') rRem();
+  showSync('Aggiornato da altro dispositivo 📱');
+}, (err) => {
+  console.warn('Firestore listener error:', err);
+});
+
+// ---- Esponi fbSave globalmente e integralo con saveLS ----
+window.fbSave = fbSave;
+
+// Override saveLS per salvare anche su Firebase
+const _origSaveLS = window.saveLS;
+window.saveLS = function(){
+  if(_origSaveLS) _origSaveLS();
+  window._lastFbSave = Date.now();
+  fbSave();
+};
+
+// Carica da Firebase all'avvio (dopo che il DOM è pronto)
+document.addEventListener('DOMContentLoaded', () => {
+  setTimeout(fbLoad, 500);
+});
+
+// Bottone salva manuale → salva anche su Firebase
+const _origManualSave = window.manualSave;
+window.manualSave = function(){
+  if(_origManualSave) _origManualSave();
+  fbSave();
+};
+
+console.log('🔥 Firebase connesso — CRM Gazzoli');
 </script>
 </body>
 </html>
