@@ -2214,7 +2214,7 @@ ${persi.length>0?`<div class="sec"><div class="st">❌ Ordini Persi (${persi.len
 ${persi.map(p=>`<tr><td>${fD(p.data)}</td><td style="font-weight:600">${esc(clienti[p.ci]?.rag||'—')}</td><td>${esc(p.prodotto||'—')}</td><td class="n rd">€${f2(p.importo||0)}</td><td style="font-size:9px">${esc(p.motivo||p.note||'—')}</td></tr>`).join('')}
 </tbody></table></div>`:''}
 <div class="ft"><div>📄 CRM Gazzoli · Polyedra S.p.A.</div><div>Agente: Gazzoli Gianluca (T03012) · ${oggi}</div><div>Visual Apr.2026 · Graphic Print Mag.2026</div></div>
-<script>window.onload=()=>setTimeout(()=>window.print(),300);<\/script>
+<scr'+'ipt>window.onload=()=>setTimeout(()=>window.print(),300);<\/scr'+'ipt>
 </body></html>`;
   const w=window.open('','_blank');
   if(w){w.document.write(html);w.document.close();}
